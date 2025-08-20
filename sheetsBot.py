@@ -5,7 +5,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from datetime import datetime, timezone
+import calendar
 import re
+from dotenv import load_dotenv, dotenv_values
+
+load_dotenv()  # take environment variables
 
 class TimesheetEvent:
   def __init__(self, shift_date, hours, location, employee_name, position):
@@ -47,12 +51,21 @@ def date_formatter(iso_date):
   return new_str
 
 def grab_calendar_events(f_name, position, credentials):
+    target_email = (os.getenv('TARGET_EMAIL'))
+    print("target email: ", target_email)
+
     timesheetEvents = []
     # Call the Calendar API
     calendar_service = build("calendar", "v3", credentials=credentials)
     # Get first day of the month in ISO8601 String format
     now = datetime.now(timezone.utc)
-    first_day_month = now.replace(day=1).isoformat()
+   
+    first_day_month = now.replace(day=1).isoformat() #datetime(2025, 7 % 12, 1, tzinfo=timezone.utc).isoformat()#now.replace(day=1).isoformat()
+    first_day_next_month = datetime(now.year, (now.month + 1) % 12, 1, tzinfo=timezone.utc).isoformat()
+    # last_day_in_month = calendar.monthrange(now.year, now.month)[1] #datetime(2025, 8, 1, tzinfo=timezone.utc).isoformat() #
+    # last_day_month_date = now.replace(day=last_day_in_month).isoformat()
+    print("first day mnth: ", first_day_month)
+    print("first day next mnth: ", first_day_next_month)
 
     print("Getting the upcoming events")
     events_result = (
@@ -60,6 +73,7 @@ def grab_calendar_events(f_name, position, credentials):
         .list(
             calendarId="primary",
             timeMin=first_day_month,
+            timeMax=first_day_next_month,
             maxResults=50,
             singleEvents=True,
             orderBy="startTime",
@@ -77,19 +91,26 @@ def grab_calendar_events(f_name, position, credentials):
       # the 'date' field is present for all day events according to Google Calendar api docs
       start = event["start"].get("dateTime", event["start"].get("date"))
       event_summary = event["summary"]
-      date_regex = re.search(r'\d{4}-\d{2}-\d{2}', start)
-     
-      # this grabs the name, pos, and hours. i.e "Leul M. (S 8.0)"
-      hours_regex = re.search(fr'{f_name}\s[A-Z]{{1}}\.\s\((?:M|S)\s\d\.\d\)', event_summary)
-      # grabs everything before the first comma
-      location_regex = re.search('^(.+?),', event['location']) 
-      location = grab_location(location_regex.group(0))
-      employee_hours = grab_hours(hours_regex.group(0))
-  
-      if date_regex:
-        date = date_formatter(date_regex.group(0))
-        timesheetEvent = TimesheetEvent(date, employee_hours, location, f_name, format_position(position))
-        timesheetEvents.append(timesheetEvent)
+      email_sender = event["creator"].get("email").lower()
+      print("email sender: ", email_sender)
+      print("event: ", event)
+      print("comparison: ", email_sender == target_email)
+
+      # only process the events that are sent from the target email
+      if email_sender == target_email:
+        date_regex = re.search(r'\d{4}-\d{2}-\d{2}', start)
+        
+        # this grabs the name, pos, and hours. i.e "Leul M. (S 8.0)"
+        hours_regex = re.search(fr'{f_name}\s[A-Z]{{1}}\.\s\((?:M|S)\s\d\.\d\)', event_summary)
+        # grabs everything before the first comma
+        location_regex = re.search('^(.+?),', event['location']) 
+        location = grab_location(location_regex.group(0))
+        employee_hours = grab_hours(hours_regex.group(0))
+    
+        if date_regex:
+            date = date_formatter(date_regex.group(0))
+            timesheetEvent = TimesheetEvent(date, employee_hours, location, f_name, format_position(position))
+            timesheetEvents.append(timesheetEvent)
     
     return timesheetEvents
         
@@ -209,9 +230,6 @@ def create(full_name, position):
                 .batchUpdate(spreadsheetId=spreadsheet_id, body=event_vals_body)
                 .execute()
             )
-
-
-
             # formatting requests: change font size, bold text, change border color for calculation box
             reqs = {
                 "requests": [
@@ -564,7 +582,7 @@ def monthNumToStr(month_num):
             return "Oops, something went wrong with the month :("
 
 # Enter first[space]last name i.e Leul Mesfin and position ('S' for Summer Teacher, 'M' for Summer Manager)
-create("Leul Mesfin", 'S')
+# create("Leul Mesfin", 'S')
 # if __name__ == "__main__":
 #   # Pass: title
 #   create("5 on it")
