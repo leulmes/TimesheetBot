@@ -5,7 +5,7 @@ I'm too lazy to fill out my timesheets for my summer job, so I created a bot ove
 ## Tech Stack 👾
 
 Bot: Python, Google Sheets, Calendar, and Drive API's<br>
-Front-end: Flask, HTML
+Front-end: Flask, HTML<br>
 Hosted on Google Firebase<br>
 
 ##
