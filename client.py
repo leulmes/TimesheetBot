@@ -89,6 +89,7 @@ def protected_area():
         'first_name': first_name,
         'uri': uri
     }
+    print("uri: ", uri)
 
     return render_template("index.html", **context)
 
