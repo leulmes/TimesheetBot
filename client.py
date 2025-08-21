@@ -47,7 +47,7 @@ def home():
 
 @app.route("/login")
 def login():
-    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true') # access_type='offline' will allow for a refresh token, which is needed for line 104
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent') # access_type='offline' will allow for a refresh token, which is needed for line 104
     session["state"] = state
     return redirect(authorization_url)
 
