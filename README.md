@@ -9,6 +9,3 @@ Front-end: Flask, HTML<br>
 Deployed on Render<br>
 
 ##
-# TimesheetBot
-# TimesheetBot
-# TimesheetBot
