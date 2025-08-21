@@ -14,7 +14,7 @@ from sheetsBot import create
 
 app = Flask(__name__)
 app.secret_key = (os.getenv('SECRET_KEY')) # should match with what's in client_secret.json
-url = (os.getenv('URL'))
+uri = (os.getenv('URI'))
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
@@ -85,10 +85,9 @@ def logout():
 @login_is_required
 def protected_area():
     first_name = session["first_name"]
-    print("url: ", url)
     context = {
         'first_name': first_name,
-        'url': url
+        'uri': uri
     }
 
     return render_template("index.html", **context)
