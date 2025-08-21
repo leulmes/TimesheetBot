@@ -7,8 +7,7 @@ from googleapiclient.errors import HttpError
 from datetime import datetime, timezone
 import calendar
 import re
-# hello
-from dotenv import load_dotenv, dotenv_values
+from dotenv import load_dotenv
 
 load_dotenv()  # take environment variables
 
@@ -19,8 +18,6 @@ class TimesheetEvent:
     self.location = location
     self.employee_name = employee_name
     self.position = position
-
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.readonly"]
 
 def grab_location(raw_loc_str):
   return (raw_loc_str[:-1]).strip()
@@ -53,8 +50,7 @@ def date_formatter(iso_date):
 
 def grab_calendar_events(f_name, position, credentials):
     target_email = (os.getenv('TARGET_EMAIL'))
-    print("target email: ", target_email)
-
+    
     timesheetEvents = []
     # Call the Calendar API
     calendar_service = build("calendar", "v3", credentials=credentials)
@@ -63,10 +59,6 @@ def grab_calendar_events(f_name, position, credentials):
    
     first_day_month = now.replace(day=1).isoformat() #datetime(2025, 7 % 12, 1, tzinfo=timezone.utc).isoformat()#now.replace(day=1).isoformat()
     first_day_next_month = datetime(now.year, (now.month + 1) % 12, 1, tzinfo=timezone.utc).isoformat()
-    # last_day_in_month = calendar.monthrange(now.year, now.month)[1] #datetime(2025, 8, 1, tzinfo=timezone.utc).isoformat() #
-    # last_day_month_date = now.replace(day=last_day_in_month).isoformat()
-    print("first day mnth: ", first_day_month)
-    print("first day next mnth: ", first_day_next_month)
 
     print("Getting the upcoming events")
     events_result = (
@@ -93,9 +85,7 @@ def grab_calendar_events(f_name, position, credentials):
       start = event["start"].get("dateTime", event["start"].get("date"))
       event_summary = event["summary"]
       email_sender = event["creator"].get("email").lower()
-      print("email sender: ", email_sender)
-      print("event: ", event)
-      print("comparison: ", email_sender == target_email)
+      
 
       # only process the events that are sent from the target email
       if email_sender == target_email:
@@ -115,38 +105,20 @@ def grab_calendar_events(f_name, position, credentials):
     
     return timesheetEvents
         
-def create(full_name, position):
-    credentials = None
-    if os.path.exists("token.json"):
-        credentials = Credentials.from_authorized_user_file("token.json", SCOPES)
-    if not credentials or not credentials.valid:
-        if credentials and credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-            credentials = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
-            token.write(credentials.to_json())
-    
+def create(full_name, position, credentials):
     try:
         event_vals = []
-
         cal_events = grab_calendar_events((full_name.split(" "))[0], position, credentials)
-        for e in cal_events:
-           print("event: ", vars(e))
+        sheets_service = build("sheets", "v4", credentials=credentials)
+        drive_service = build("drive", "v3", credentials=credentials)
 
         current_month = datetime.now().month
         current_year = datetime.now().year
         sheet_title = f"{full_name} Timesheet " + monthNumToStr(current_month) + " " + str(current_year)
         
-        sheets_service = build("sheets", "v4", credentials=credentials)
-        drive_service = build("drive", "v3", credentials=credentials)
-        
         results = drive_service.files().list(pageSize=1, fields="files(id, name)", q="name='" + sheet_title + "' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false",).execute()
-        print("results: ", results)
         files = results.get("files", [])
-        print("files: ", files)
-
+       
         if not files:
             # spreadsheet doesn't exist: create it
             spreadsheet = {"properties": {"title": sheet_title}}
@@ -538,8 +510,7 @@ def create(full_name, position):
                 .batchUpdate(spreadsheetId=spreadsheet_id, body=reqs)
                 .execute()
             )
-            print(result)
-
+            
             print("A new spreadsheet created :O")
             print(f"Spreadsheet ID: {spreadsheet_id}")
 
@@ -581,9 +552,3 @@ def monthNumToStr(month_num):
             return "December"
         case 13:
             return "Oops, something went wrong with the month :("
-
-# Enter first[space]last name i.e Leul Mesfin and position ('S' for Summer Teacher, 'M' for Summer Manager)
-# create("Leul Mesfin", 'S')
-# if __name__ == "__main__":
-#   # Pass: title
-#   create("5 on it")

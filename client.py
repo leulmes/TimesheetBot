@@ -3,25 +3,29 @@ import pathlib
 import requests
 from flask import Flask, render_template, request, session, abort, redirect
 from google.oauth2 import id_token
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from pip._vendor import cachecontrol
 import google.auth.transport.requests
+import json
 
 
 from sheetsBot import create
 
 app = Flask(__name__)
 app.secret_key = (os.getenv('SECRET_KEY')) # should match with what's in client_secret.json
+url = (os.getenv('URL'))
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 GOOGLE_CLIENT_ID = (os.getenv('GOOGLE_CLIENT_ID'))
 client_secrets_file = os.path.join(pathlib.Path(__file__).parent, "client_secret.json")
 CALLBACK_URI = (os.getenv('CALLBACK_URI'))
+SCOPES = ["openid", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/userinfo.profile"]
 
 flow = Flow.from_client_secrets_file(
     client_secrets_file=client_secrets_file, 
-    scopes=["openid", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/userinfo.profile"],
+    scopes=SCOPES,
     redirect_uri=CALLBACK_URI
     )
 
@@ -43,13 +47,12 @@ def home():
 
 @app.route("/login")
 def login():
-    authorization_url, state = flow.authorization_url()
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true') # access_type='offline' will allow for a refresh token, which is needed for line 104
     session["state"] = state
     return redirect(authorization_url)
 
 @app.route("/callback")
 def callback():
-    print("req url: ", request.url)
     flow.fetch_token(authorization_response=request.url)
 
     if not session["state"] == request.args["state"]:
@@ -65,10 +68,12 @@ def callback():
         request=token_request,
         audience=GOOGLE_CLIENT_ID
     )
-    print("id_info: ", id_info)
+
     session["google_id"] = id_info.get("sub")
     session["full_name"] = id_info.get("name")
     session["first_name"] = id_info.get("given_name")
+    session["credentials"] = credentials.to_json() # serialize & store
+
     return redirect("/protected_area")
 
 @app.route("/logout")
@@ -79,11 +84,11 @@ def logout():
 @app.route("/protected_area")
 @login_is_required
 def protected_area():
-    full_name = session["full_name"]
     first_name = session["first_name"]
+    print("url: ", url)
     context = {
-        'full_name': full_name,
-        'first_name': first_name
+        'first_name': first_name,
+        'url': url
     }
 
     return render_template("index.html", **context)
@@ -91,14 +96,14 @@ def protected_area():
 @app.route("/protected_area2", methods=["POST"])
 @login_is_required
 def protected_area2():
-    #return f"Open Google Sheets to view your timesheet. <a href='/logout'><button>Logout</button></a>"
     if request.method == "POST":
         full_name = session["full_name"]
         pos = request.form["position"]
-        #print("pos: ", request.form["position"])
-        create(full_name, pos)
+        creds = json.loads(session["credentials"])
+        credentials = Credentials.from_authorized_user_info(creds, SCOPES)
+
+        create(full_name, pos, credentials)
         return render_template('logout.html')
-    # return f"Your timesheet has been created. Open your Google Sheets to verify :) <br/> <a href='/logout'><button>Logout</button></a>"
 
 
 if __name__ == "__main__":
